@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Assistant</title>
+  <style>
+    body {
+      width: 380px;
+      font-family: Arial, sans-serif;
+      padding: 15px;
+      font-size: 14px;
+    }
+    
+    h1 {
+      color: #3366cc;
+      font-size: 18px;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    
+    .status-panel {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 15px;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .connected {
+      background-color: #4CAF50;
+    }
+    
+    .disconnected {
+      background-color: #F44336;
+    }
+    
+    .command-panel {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 12px;
+      margin-bottom: 15px;
+    }
+    
+    .command-form label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    .command-form select,
+    .command-form input[type="text"],
+    .command-form textarea {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    .command-form textarea {
+      height: 80px;
+      resize: vertical;
+    }
+    
+    .button {
+      display: inline-block;
+      background-color: #3366cc;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .button:hover {
+      background-color: #254e9c;
+    }
+    
+    .log-panel {
+      background-color: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    .log-entry {
+      margin-bottom: 5px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+    }
+    
+    .log-info {
+      color: #2196F3;
+    }
+    
+    .log-warn {
+      color: #FF9800;
+    }
+    
+    .log-error {
+      color: #F44336;
+    }
+  </style>
+</head>
+<body>
+  <h1>MCP Assistant for Firefox</h1>
+  
+  <div class="status-panel">
+    <span class="status-indicator disconnected" id="status-indicator"></span>
+    <span id="status-text">MCP 서버 연결 확인 중...</span>
+  </div>
+  
+  <div class="command-panel">
+    <form class="command-form" id="command-form">
+      <label for="action">액션:</label>
+      <select id="action" name="action">
+        <option value="click">클릭 (click)</option>
+        <option value="input">입력 (input)</option>
+        <option value="scroll">스크롤 (scroll)</option>
+        <option value="extract">데이터 추출 (extract)</option>
+      </select>
+      
+      <div id="selector-group">
+        <label for="selector">선택자 (CSS selector):</label>
+        <input type="text" id="selector" name="selector" placeholder="예: #submit-button, .menu-item, h1">
+      </div>
+      
+      <div id="value-group" style="display: none;">
+        <label for="value">입력값:</label>
+        <input type="text" id="value" name="value" placeholder="입력할 텍스트">
+      </div>
+      
+      <button type="submit" class="button">명령 실행</button>
+    </form>
+  </div>
+  
+  <h3>로그</h3>
+  <div class="log-panel" id="log-panel">
+    <div class="log-entry log-info">MCP Assistant가 시작되었습니다.</div>
+  </div>
+  
+  <script src="utils.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
