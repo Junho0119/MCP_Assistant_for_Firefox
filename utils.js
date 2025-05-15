@@ -18,8 +18,45 @@ const STATUS = {
 function normalizeSelector(selector) {
   if (!selector) return null;
   
-  // 기본적인 정규화 - 추가적인 로직은 필요에 따라 확장
-  return selector.trim();
+  // 기본 공백 제거
+  selector = selector.trim();
+  
+  // 잘못된 선택자 문자 제거 (특수문자 등)
+  selector = selector.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+  
+  // 따옴표 정규화 (따옴표가 짝을 이루도록)
+  let doubleQuotes = (selector.match(/"/g) || []).length;
+  let singleQuotes = (selector.match(/'/g) || []).length;
+  
+  if (doubleQuotes % 2 !== 0) {
+    selector = selector.replace(/"/g, '\'');
+  }
+  
+  if (singleQuotes % 2 !== 0) {
+    selector = selector.replace(/'/g, '"');
+  }
+  
+  try {
+    // 유효성 검사 (테스트용 선택자 실행)
+    document.querySelector(selector);
+  } catch (e) {
+    // 오류 발생 시 기본 안전한 버전으로 대체
+    log('warn', 'utils', `Invalid selector normalized: ${selector}`, { error: e.message });
+    
+    // 간단한 선택자로 변환 시도 (ID, 클래스, 태그 등)
+    if (selector.includes('#')) {
+      selector = selector.split('#')[1].split(' ')[0];
+      selector = '#' + selector.replace(/[^\w-]/g, '');
+    } else if (selector.includes('.')) {
+      selector = selector.split('.')[1].split(' ')[0];
+      selector = '.' + selector.replace(/[^\w-]/g, '');
+    } else {
+      // 기본 요소 유형으로 가정
+      selector = selector.split(' ')[0].replace(/[^\w-]/g, '');
+    }
+  }
+  
+  return selector;
 }
 
 /**

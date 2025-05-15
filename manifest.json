@@ -13,7 +13,7 @@
     "activeTab",
     "storage",
     "scripting",
-    "<all_urls>"
+    "http://localhost:3001/*"
   ],
   "background": {
     "scripts": ["utils.js", "background.js"],

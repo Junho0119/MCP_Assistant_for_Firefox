@@ -22,14 +22,128 @@ const CommandExecutor = {
     // 잠시 대기하여 스크롤 완료 확인
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // 클릭 이벤트 발생
-    element.click();
+    // 요소가 클릭 가능한지 확인
+    const isClickable = this.isElementClickable(element);
+    if (!isClickable.clickable) {
+      log('warn', 'content', `Element might not be clickable: ${isClickable.reason}`, { selector });
+    }
+    
+    // 다양한 이벤트 시뮬레이션 시도
+    try {
+      // 1. 기본 클릭 시도
+      element.click();
+    } catch (error) {
+      log('warn', 'content', `Basic click failed, trying alternative methods: ${error.message}`, { selector });
+      
+      try {
+        // 2. 마우스 이벤트 시뮬레이션
+        this.simulateMouseEvents(element);
+      } catch (mouseError) {
+        log('warn', 'content', `Mouse events simulation failed: ${mouseError.message}`, { selector });
+        
+        // 3. JavaScript 이벤트 핸들러 직접 호출 시도
+        this.executeClickHandlers(element);
+      }
+    }
+    
+    // 짧은 지연으로 DOM 업데이트 대기
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     return createResult(STATUS.SUCCESS, {
       action: 'click',
       selector,
       elementInfo: this.getElementInfo(element)
     }, `Successfully clicked element: ${selector}`);
+  },
+  
+  /**
+   * 요소가 클릭 가능한지 확인
+   * @param {Element} element - 확인할 요소
+   * @return {Object} 클릭 가능 여부와 사유
+   */
+  isElementClickable: function(element) {
+    if (!element) {
+      return { clickable: false, reason: 'Element does not exist' };
+    }
+    
+    // 요소나 부모가 disabled인지 확인
+    if (element.disabled) {
+      return { clickable: false, reason: 'Element is disabled' };
+    }
+    
+    // 표시 여부 확인
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none') {
+      return { clickable: false, reason: 'Element is not displayed (display: none)' };
+    }
+    
+    if (style.visibility === 'hidden') {
+      return { clickable: false, reason: 'Element is not visible (visibility: hidden)' };
+    }
+    
+    if (parseFloat(style.opacity) === 0) {
+      return { clickable: false, reason: 'Element is transparent (opacity: 0)' };
+    }
+    
+    // 크기 확인
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return { clickable: false, reason: 'Element has zero width or height' };
+    }
+    
+    // 다른 요소에 가려져 있는지 확인은 복잡하여 생략
+    
+    return { clickable: true, reason: '' };
+  },
+  
+  /**
+   * 마우스 이벤트 시퀀스 시뮬레이션
+   * @param {Element} element - 대상 요소
+   */
+  simulateMouseEvents: function(element) {
+    const eventSequence = [
+      'mouseenter',
+      'mouseover',
+      'mousedown',
+      'mouseup',
+      'click'
+    ];
+    
+    for (const eventType of eventSequence) {
+      const event = new MouseEvent(eventType, {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        buttons: 1  // 왼쪽 마우스 버튼
+      });
+      
+      element.dispatchEvent(event);
+    }
+  },
+  
+  /**
+   * 요소에 연결된 클릭 핸들러 실행 시도
+   * @param {Element} element - 대상 요소
+   */
+  executeClickHandlers: function(element) {
+    // 요소 onclick 속성 확인
+    if (typeof element.onclick === 'function') {
+      element.onclick();
+      return;
+    }
+    
+    // 부모 요소들까지 찾아보기
+    let parent = element.parentElement;
+    let depth = 0;
+    
+    while (parent && depth < 3) {  // 최대 3레벨까지만 확인
+      if (typeof parent.onclick === 'function') {
+        parent.onclick();
+        return;
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
   },
   
   /**
@@ -44,20 +158,77 @@ const CommandExecutor = {
       throw new Error(`Element not found: ${selector}`);
     }
     
-    // contentEditable 요소 또는 input/textarea 구분
-    if (element.isContentEditable) {
+    // 요소가 화면에 보이도록 스크롤
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    try {
+      // 포커스 설정
       element.focus();
-      element.innerHTML = value;
+      await new Promise(resolve => setTimeout(resolve, 100));
       
-      // 변경 이벤트 트리거
-      const event = new Event('input', { bubbles: true });
-      element.dispatchEvent(event);
-    } else {
-      // input, textarea 등의 요소
-      element.focus();
-      element.value = value;
+      // contentEditable 요소 또는 input/textarea 구분
+      if (element.isContentEditable) {
+        // contentEditable 요소 (리치 텍스트 에디터 등)
+        element.innerHTML = '';
+        
+        // 문자 하나씩 입력 (더 자연스러운 입력)
+        for (let i = 0; i < value.length; i++) {
+          const char = value.charAt(i);
+          
+          // 키보드 이벤트 시뮬레이션
+          this.simulateKeyInput(element, char);
+          
+          // 짧은 지연 (자연스러운 타이핑 효과)
+          if (i % 3 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+        }
+        
+        // 변경 이벤트 트리거
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // 일반 입력 요소 (input, textarea 등)
+        
+        // 기존 내용 지우기
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // 새 값 설정 (선택적으로 문자별 입력)
+        if (value.length > 20) {
+          // 긴 텍스트는 한 번에 설정
+          element.value = value;
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          // 짧은 텍스트는 문자별 입력
+          for (let i = 0; i < value.length; i++) {
+            element.value += value.charAt(i);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            if (i % 3 === 0) {
+              await new Promise(resolve => setTimeout(resolve, 10));
+            }
+          }
+        }
+        
+        // 최종 변경 이벤트 트리거
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       
-      // 변경 이벤트 트리거
+      // 포커스 해제
+      element.blur();
+    } catch (error) {
+      log('warn', 'content', `Natural input failed, using direct assignment: ${error.message}`, { selector });
+      
+      // 실패 시 직접 할당 시도
+      if (element.isContentEditable) {
+        element.innerHTML = value;
+      } else {
+        element.value = value;
+      }
+      
+      // 이벤트 트리거
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
     }
@@ -68,6 +239,48 @@ const CommandExecutor = {
       value,
       elementInfo: this.getElementInfo(element)
     }, `Successfully input value to element: ${selector}`);
+  },
+  
+  /**
+   * 키보드 입력 시뮬레이션
+   * @param {Element} element - 대상 요소
+   * @param {string} char - 입력할 문자
+   */
+  simulateKeyInput: function(element, char) {
+    const keyEvents = [
+      new KeyboardEvent('keydown', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        bubbles: true,
+        cancelable: true
+      }),
+      new KeyboardEvent('keypress', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        bubbles: true,
+        cancelable: true
+      }),
+      new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        data: char,
+        bubbles: true,
+        cancelable: true
+      }),
+      new InputEvent('input', {
+        inputType: 'insertText',
+        data: char,
+        bubbles: true,
+        cancelable: true
+      }),
+      new KeyboardEvent('keyup', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        bubbles: true,
+        cancelable: true
+      })
+    ];
+    
+    keyEvents.forEach(event => element.dispatchEvent(event));
   },
   
   /**
@@ -110,6 +323,11 @@ const CommandExecutor = {
         // 기본적으로 아래로 스크롤
         window.scrollBy({ top: 500, behavior: scrollOptions.behavior });
       }
+    }
+    
+    // 스크롤 애니메이션 완료 대기
+    if (scrollOptions.behavior === 'smooth') {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     // 현재 스크롤 위치 정보
@@ -159,7 +377,7 @@ const CommandExecutor = {
       if (elements.length === 1 && !options.extractAll) {
         // 단일 요소 추출
         const element = elements[0];
-        extractedData = this.getElementData(element);
+        extractedData = this.getElementData(element, options);
       } else {
         // 여러 요소 목록 추출
         extractedData = elements.map((element, index) => ({
@@ -219,6 +437,22 @@ const CommandExecutor = {
       }
     }
     
+    // 계산된 스타일 추출 (옵션)
+    if (options.includeStyles) {
+      data.styles = {};
+      const computedStyle = window.getComputedStyle(element);
+      
+      // 중요한 스타일 속성만 추출
+      const importantStyles = [
+        'display', 'visibility', 'position', 'width', 'height',
+        'color', 'background-color', 'font-size', 'font-weight'
+      ];
+      
+      for (const style of importantStyles) {
+        data.styles[style] = computedStyle.getPropertyValue(style);
+      }
+    }
+    
     return data;
   },
   
@@ -272,10 +506,10 @@ const CommandExecutor = {
    * @param {number} timeout - 최대 대기 시간 (ms)
    * @return {Promise<Element>} 찾은 요소
    */
-  waitForElement: function(selector, timeout = 5000) {
+  waitForElement: function(selector, timeout = 10000) {
     return new Promise((resolve) => {
-      // 이미 존재하는 요소 확인
-      const element = document.querySelector(selector);
+      // 이미 존재하는 요소 확인 (고급 쿼리 사용)
+      const element = this.querySelector(selector);
       if (element) {
         resolve(element);
         return;
@@ -289,7 +523,7 @@ const CommandExecutor = {
       
       // DOM 변경 감시
       const observer = new MutationObserver((mutations, obs) => {
-        const element = document.querySelector(selector);
+        const element = this.querySelector(selector);
         if (element) {
           obs.disconnect();
           clearTimeout(timeoutId);
@@ -300,9 +534,97 @@ const CommandExecutor = {
       // 옵저버 시작
       observer.observe(document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true
       });
     });
+  },
+  
+  /**
+   * 고급 선택자 쿼리 - Shadow DOM 및 iframe 지원
+   * @param {string} selector - CSS 선택자
+   * @return {Element} 찾은 요소 또는 null
+   */
+  querySelector: function(selector) {
+    // 일반 DOM 먼저 시도
+    let element = document.querySelector(selector);
+    if (element) return element;
+    
+    // Shadow DOM 검색
+    element = this.querySelectorInShadowDOM(document.body, selector);
+    if (element) return element;
+    
+    // iframe 검색
+    return this.querySelectorInIframes(selector);
+  },
+  
+  /**
+   * Shadow DOM 내에서 요소 검색
+   * @param {Element} root - 검색 시작 요소
+   * @param {string} selector - CSS 선택자
+   * @return {Element} 찾은 요소 또는 null
+   */
+  querySelectorInShadowDOM: function(root, selector) {
+    if (!root) return null;
+    
+    // 현재 노드의 shadowRoot 확인
+    if (root.shadowRoot) {
+      const element = root.shadowRoot.querySelector(selector);
+      if (element) return element;
+      
+      // shadowRoot 내부의 모든 요소 검색
+      const childElements = Array.from(root.shadowRoot.querySelectorAll('*'));
+      for (const child of childElements) {
+        const found = this.querySelectorInShadowDOM(child, selector);
+        if (found) return found;
+      }
+    }
+    
+    // 자식 요소 재귀 검색
+    const children = Array.from(root.querySelectorAll('*'));
+    for (const child of children) {
+      const found = this.querySelectorInShadowDOM(child, selector);
+      if (found) return found;
+    }
+    
+    return null;
+  },
+  
+  /**
+   * iframe 내에서 요소 검색
+   * @param {string} selector - CSS 선택자
+   * @return {Element} 찾은 요소 또는 null
+   */
+  querySelectorInIframes: function(selector) {
+    try {
+      const iframes = document.querySelectorAll('iframe');
+      
+      for (const iframe of iframes) {
+        try {
+          // iframe 접근이 보안 정책으로 제한될 수 있음
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          
+          // iframe 내 직접 검색
+          const element = iframeDoc.querySelector(selector);
+          if (element) return element;
+          
+          // iframe 내 shadow DOM 검색
+          const shadowElement = this.querySelectorInShadowDOM(iframeDoc.body, selector);
+          if (shadowElement) return shadowElement;
+          
+          // 중첩 iframe 검색 (재귀)
+          const nestedElement = this.querySelectorInIframes(selector);
+          if (nestedElement) return nestedElement;
+        } catch (e) {
+          // 크로스 도메인 오류는 무시 (동일 출처 정책으로 인한 제한)
+          continue;
+        }
+      }
+    } catch (e) {
+      log('error', 'content', 'Error searching iframes', { error: e.message });
+    }
+    
+    return null;
   }
 };
 
